@@ -42,6 +42,32 @@ function MyThree() {
     return <primitive ref={meshRef} object={clonedObj} />;
   }
 
+function StarField() {
+  const starsRef = useRef();
+  const starCount = 5000;
+  
+  useEffect(() => {
+    const positions = new Float32Array(starCount * 3);
+    for (let i = 0; i < starCount * 3; i++) {
+      positions[i] = (Math.random() - 0.5) * 200;
+    }
+    if (starsRef.current) {
+      starsRef.current.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    }
+  }, []); // Empty dependency array - only run once
+
+  return (
+    <points>
+      <bufferGeometry ref={starsRef} />
+      <pointsMaterial 
+        color="white" 
+        size={1} 
+        sizeAttenuation={false}
+      />
+    </points>
+  );
+}
+
   function Ground() {
     return (
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -2, 0]} receiveShadow>
@@ -69,6 +95,12 @@ function MyThree() {
   useEffect(() => {
     const handleKeyDown = (event) => {
       switch (event.key) {
+            case 'a':
+          setKeyState(prev => ({ ...prev, left: true }));
+          break;
+              case 'd':
+          setKeyState(prev => ({ ...prev, right: true }));
+          break;
         case 'ArrowLeft':
           setKeyState(prev => ({ ...prev, left: true }));
           break;
@@ -80,6 +112,12 @@ function MyThree() {
 
     const handleKeyUp = (event) => {
       switch (event.key) {
+            case 'a':
+          setKeyState(prev => ({ ...prev, left: false }));
+          break;
+              case 'd':
+          setKeyState(prev => ({ ...prev, right: false }));
+          break;
         case 'ArrowLeft':
           setKeyState(prev => ({ ...prev, left: false }));
           break;
@@ -103,8 +141,8 @@ function MyThree() {
         setPosition((prev) => {
           const [x, y, z] = prev;
           let newX = x;
-          if (keyState.left) newX -= 0.05;
-          if (keyState.right) newX += 0.05;
+          if (keyState.left) newX -= 0.15;
+          if (keyState.right) newX += 0.15;
           return [newX, y, z];
         });
       }
@@ -123,7 +161,7 @@ function MyThree() {
     <div style={{ width: '100vw', height: '100vh' }}>
       <Canvas
         camera={{ position: [0, 2, 5], fov: 75 }}
-        style={{ background: '#222222' }}
+        style={{ background: '#0000' }}
         shadows
       >
         <ambientLight intensity={0.4} />
@@ -135,6 +173,7 @@ function MyThree() {
         />
         <SpaceshipModel />
         <Ground />
+        <StarField/>
         <CameraController />
         <OrbitControls enabled={false} />
       </Canvas>
