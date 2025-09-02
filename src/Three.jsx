@@ -252,24 +252,31 @@ function MyThree() {
 
     function StarField() {
         const starsRef = useRef();
-        const starCount = 5000;
+        const starCount = 800;
 
         useEffect(() => {
             const positions = new Float32Array(starCount * 3);
-            for (let i = 0; i < starCount * 3; i++) {
-                positions[i] = (Math.random() - 0.5) * 200;
+            for (let i = 0; i < starCount; i++) {
+                // Generate stars on a large sphere around the origin
+                const radius = 300;
+                const theta = Math.random() * Math.PI * 2; // Random angle around Y axis
+                const phi = Math.acos(1 - 2 * Math.random()); // Random angle from top to bottom
+                
+                positions[i * 3] = radius * Math.sin(phi) * Math.cos(theta);     // x
+                positions[i * 3 + 1] = radius * Math.sin(phi) * Math.sin(theta); // y
+                positions[i * 3 + 2] = radius * Math.cos(phi);                   // z
             }
             if (starsRef.current) {
                 starsRef.current.setAttribute('position', new THREE.BufferAttribute(positions, 3));
             }
-        }, []); // Empty dependency array - only run once
+        }, []); // Generate once and never update
 
         return (
             <points>
                 <bufferGeometry ref={starsRef} />
                 <pointsMaterial
                     color="white"
-                    size={1}
+                    size={2}
                     sizeAttenuation={false}
                 />
             </points>
