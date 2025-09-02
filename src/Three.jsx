@@ -10,6 +10,8 @@ function MyThree() {
     const [tiltAngle, setTiltAngle] = useState({ x: 0, z: 0 });
     const [obstacles, setObstacles] = useState([]);
     const [projectiles, setProjectiles] = useState([]);
+    const [shipHp, setShipHp] = useState(100);
+    const [gameOver, setGameOver] = useState(false);
     const [obstacleSpeed, setObstacleSpeed] = useState(0.1);
     const [spawnInterval, setSpawnInterval] = useState(2000);
     const positionRef = useRef([0, 0, 0]);
@@ -41,8 +43,10 @@ function MyThree() {
                         newWave.push({
                             id: Date.now() + Math.random() + i,
                             x: (Math.random() - 0.5) * 20,
-                            y: Math.random() * 6 - 3, // Range: -3 to 3
-                            z: -Math.random() * 20 - 30 // Range: -30 to -50
+                            y: Math.random() * 6 - 3,
+                            z: -Math.random() * 20 - 30,
+                            hp: 20,
+                            maxHp: 20
                         });
                     }
                     
@@ -56,26 +60,57 @@ function MyThree() {
 
         return (
             <>
-                {obstacles.map((obstacle, index) => (
-                    <mesh
-                        key={obstacle.id}
-                        position={[obstacle.x, obstacle.y, obstacle.z]}
-                        ref={el => obstacleRefs.current[index] = el}
-                    >
-                        <sphereGeometry args={[0.5, 16, 16]} />
-                        <meshStandardMaterial color="#ff4444" />
-                    </mesh>
-                ))}
+                {obstacles.map((obstacle, index) => {
+                    const healthPercentage = obstacle.hp / obstacle.maxHp;
+                    const red = Math.floor(255 * healthPercentage);
+                    const color = `rgb(${red}, 0, 0)`;
+                    
+                    return (
+                        <mesh
+                            key={obstacle.id}
+                            position={[obstacle.x, obstacle.y, obstacle.z]}
+                            ref={el => obstacleRefs.current[index] = el}
+                        >
+                            <sphereGeometry args={[0.5, 16, 16]} />
+                            <meshStandardMaterial color={color} />
+                        </mesh>
+                    );
+                })}
             </>
         );
     }
 
     function ProjectileSystem() {
         useFrame(() => {
-            setProjectiles(prev => prev.map(projectile => ({
-                ...projectile,
-                z: projectile.z - 1
-            })).filter(projectile => projectile.z > -50));
+            setProjectiles(prev => {
+                return prev.map(projectile => ({
+                    ...projectile,
+                    z: projectile.z - 1
+                })).filter(projectile => projectile.z > -50);
+            });
+
+            // Check for collisions between projectiles and obstacles
+            setObstacles(prevObstacles => {
+                return prevObstacles.map(obstacle => {
+                    let newObstacle = { ...obstacle };
+                    
+                    projectiles.forEach(projectile => {
+                        const distance = Math.sqrt(
+                            Math.pow(obstacle.x - projectile.x, 2) +
+                            Math.pow(obstacle.y - projectile.y, 2) +
+                            Math.pow(obstacle.z - projectile.z, 2)
+                        );
+                        
+                        if (distance < 0.6) {
+                            newObstacle.hp = Math.max(0, newObstacle.hp - 5);
+                            // Remove the projectile that hit
+                            setProjectiles(prev => prev.filter(p => p.id !== projectile.id));
+                        }
+                    });
+                    
+                    return newObstacle;
+                }).filter(obstacle => obstacle.hp > 0);
+            });
         });
 
         const shootProjectile = () => {
@@ -144,6 +179,29 @@ function MyThree() {
             
             tiltRef.current = { x: newTiltX, z: newTiltZ };
             setTiltAngle({ x: newTiltX, z: newTiltZ });
+
+            // Check for ship-obstacle collisions
+            if (!gameOver) {
+                obstacles.forEach(obstacle => {
+                    const distance = Math.sqrt(
+                        Math.pow(obstacle.x - position[0], 2) +
+                        Math.pow(obstacle.y - position[1], 2) +
+                        Math.pow(obstacle.z - position[2], 2)
+                    );
+                    
+                    if (distance < 0.8) {
+                        setShipHp(prev => {
+                            const newHp = Math.max(0, prev - obstacle.hp);
+                            if (newHp === 0) {
+                                setGameOver(true);
+                            }
+                            return newHp;
+                        });
+                        
+                        setObstacles(prev => prev.filter(obs => obs.id !== obstacle.id));
+                    }
+                });
+            }
         });
 
         return null;
@@ -231,6 +289,16 @@ function MyThree() {
 
         return null;
     }
+
+    const restartGame = () => {
+        setGameOver(false);
+        setShipHp(100);
+        setPosition([0, 0, 0]);
+        setObstacles([]);
+        setProjectiles([]);
+        positionRef.current = [0, 0, 0];
+        tiltRef.current = { x: 0, z: 0 };
+    };
 
     useEffect(() => {
         const handleKeyDown = (event) => {
@@ -322,27 +390,85 @@ function MyThree() {
     //   }, [keyState]);
 
     return (
-        <div style={{ width: '100vw', height: '100vh' }}>
+        <div style={{ width: '100vw', height: '100vh', position: 'relative' }}>
+            {/* HP Bar */}
+            <div style={{
+                position: 'absolute',
+                top: '20px',
+                left: '20px',
+                zIndex: 1000,
+                color: 'white',
+                fontSize: '20px',
+                fontFamily: 'Arial, sans-serif'
+            }}>
+                <div>HP: {shipHp}/100</div>
+                <div style={{
+                    width: '200px',
+                    height: '20px',
+                    border: '2px solid white',
+                    backgroundColor: 'transparent',
+                    marginTop: '5px'
+                }}>
+                    <div style={{
+                        width: `${(shipHp / 100) * 100}%`,
+                        height: '100%',
+                        backgroundColor: shipHp > 30 ? '#00ff00' : shipHp > 15 ? '#ffff00' : '#ff0000',
+                        transition: 'width 0.3s, background-color 0.3s'
+                    }}></div>
+                </div>
+            </div>
+
+            {/* Game Over Screen */}
+            {gameOver && (
+                <div 
+                    style={{
+                        position: 'absolute',
+                        top: '50%',
+                        left: '50%',
+                        transform: 'translate(-50%, -50%)',
+                        zIndex: 2000,
+                        color: 'white',
+                        fontSize: '48px',
+                        fontFamily: 'Arial, sans-serif',
+                        textAlign: 'center',
+                        backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                        padding: '40px',
+                        borderRadius: '10px',
+                        cursor: 'pointer'
+                    }}
+                    onClick={restartGame}
+                >
+                    <div>GAME OVER</div>
+                    <div style={{ fontSize: '24px', marginTop: '20px' }}>
+                        Click to restart
+                    </div>
+                </div>
+            )}
+
             <Canvas
                 camera={{ position: [0, 2, 5], fov: 75 }}
                 style={{ background: '#0000' }}
                 shadows
             >
-                <ambientLight intensity={0.4} />
-                <directionalLight
-                    position={[10, 10, 10]}
-                    intensity={1.2}
-                    castShadow
-                    shadow-mapSize={[1024, 1024]}
-                />
-                <MovementController />
-                <SpaceshipModel />
-                <Ground />
-                <StarField />
-                <ObstacleSystem />
-                <ProjectileSystem />
-                <CameraController />
-                <OrbitControls enabled={false} />
+                {!gameOver && (
+                    <>
+                        <ambientLight intensity={0.4} />
+                        <directionalLight
+                            position={[10, 10, 10]}
+                            intensity={1.2}
+                            castShadow
+                            shadow-mapSize={[1024, 1024]}
+                        />
+                        <MovementController />
+                        <SpaceshipModel />
+                        <Ground />
+                        <StarField />
+                        <ObstacleSystem />
+                        <ProjectileSystem />
+                        <CameraController />
+                        <OrbitControls enabled={false} />
+                    </>
+                )}
             </Canvas>
         </div>
     );
