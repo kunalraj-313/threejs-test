@@ -6,16 +6,15 @@ import * as THREE from 'three';
 
 function MyThree() {
   const [position, setPosition] = useState([0, 0, 0]);
+  const [keyState, setKeyState] = useState({ left: false, right: false });
+  const [tiltAngle, setTiltAngle] = useState(0);
 
-  // SpaceshipModel component defined inside MyThree to share state
   function SpaceshipModel() {
     const meshRef = useRef();
     const obj = useLoader(OBJLoader, '/models/spaceship.obj');
     
-    // Clone the object to avoid modifying the original
     const clonedObj = obj.clone();
     
-    // Center and scale the object
     const box = new THREE.Box3().setFromObject(clonedObj);
     const center = box.getCenter(new THREE.Vector3());
     clonedObj.position.sub(center);
@@ -27,24 +26,22 @@ function MyThree() {
     
     clonedObj.rotation.y = Math.PI;
 
-    // Enable shadow casting for the spaceship
     clonedObj.traverse((child) => {
       if (child.isMesh) {
         child.castShadow = true;
       }
     });
 
-    // Update object position using shared state
     useFrame(() => {
       if (meshRef.current) {
         meshRef.current.position.set(...position);
+        meshRef.current.rotation.z = tiltAngle;
       }
     });
 
     return <primitive ref={meshRef} object={clonedObj} />;
   }
 
-  // Ground component defined inside MyThree
   function Ground() {
     return (
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -2, 0]} receiveShadow>
@@ -54,42 +51,73 @@ function MyThree() {
     );
   }
 
-  // Camera controller to follow the spaceship
   function CameraController() {
     const { camera } = useThree();
     
     useFrame(() => {
-      // Update camera position to follow the spaceship
       const targetX = position[0];
-      const targetY = position[1] + 2; // Stay 2 units above the spaceship
-      const targetZ = position[2] + 5; // Stay 5 units behind the spaceship
+      const targetY = position[1] + 2;
+      const targetZ = position[2] + 5;
       
       camera.position.set(targetX, targetY, targetZ);
-      camera.lookAt(position[0], position[1], position[2]); // Look at the spaceship
+      camera.lookAt(position[0], position[1], position[2]);
     });
     
     return null;
   }
 
-  // Handle keyboard input in the parent component
   useEffect(() => {
     const handleKeyDown = (event) => {
-      setPosition((prev) => {
-        const [x, y, z] = prev;
-        switch (event.key) {
-          case 'ArrowLeft':
-            return [x - 0.1, y, z];
-          case 'ArrowRight':
-            return [x + 0.1, y, z];
-          default:
-            return prev;
-        }
-      });
+      switch (event.key) {
+        case 'ArrowLeft':
+          setKeyState(prev => ({ ...prev, left: true }));
+          break;
+        case 'ArrowRight':
+          setKeyState(prev => ({ ...prev, right: true }));
+          break;
+      }
+    };
+
+    const handleKeyUp = (event) => {
+      switch (event.key) {
+        case 'ArrowLeft':
+          setKeyState(prev => ({ ...prev, left: false }));
+          break;
+        case 'ArrowRight':
+          setKeyState(prev => ({ ...prev, right: false }));
+          break;
+      }
     };
 
     window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+    };
   }, []);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (keyState.left || keyState.right) {
+        setPosition((prev) => {
+          const [x, y, z] = prev;
+          let newX = x;
+          if (keyState.left) newX -= 0.05;
+          if (keyState.right) newX += 0.05;
+          return [newX, y, z];
+        });
+      }
+
+      setTiltAngle((prev) => {
+        const targetTilt = keyState.left ? -0.3 : keyState.right ? 0.3 : 0;
+        const tiltSpeed = 0.1;
+        return prev + (targetTilt - prev) * tiltSpeed;
+      });
+    }, 16);
+
+    return () => clearInterval(interval);
+  }, [keyState]);
 
   return (
     <div style={{ width: '100vw', height: '100vh' }}>
