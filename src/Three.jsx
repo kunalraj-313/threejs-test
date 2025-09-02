@@ -6,13 +6,14 @@ import * as THREE from 'three';
 
 function MyThree() {
     const [position, setPosition] = useState([0, 0, 0]);
-    const [keyState, setKeyState] = useState({ left: false, right: false });
-    const [tiltAngle, setTiltAngle] = useState(0);
+    const [keyState, setKeyState] = useState({ left: false, right: false, up: false, down: false });
+    const [tiltAngle, setTiltAngle] = useState({ x: 0, z: 0 });
     const [obstacles, setObstacles] = useState([]);
-    const [obstacleSpeed, setObstacleSpeed] = useState(0.2);
+    const [projectiles, setProjectiles] = useState([]);
+    const [obstacleSpeed, setObstacleSpeed] = useState(0.1);
     const [spawnInterval, setSpawnInterval] = useState(2000);
     const positionRef = useRef([0, 0, 0]);
-    const tiltRef = useRef(0);
+    const tiltRef = useRef({ x: 0, z: 0 });
 
 
 
@@ -33,15 +34,15 @@ function MyThree() {
                 
                 if (filteredObstacles.length === 0) {
                     
-                    const numberOfObstacles = Math.floor(Math.random() * 10) + 1;
+                    const numberOfObstacles = Math.floor(Math.random() * 20) + 1;
                     const newWave = [];
                     
                     for (let i = 0; i < numberOfObstacles; i++) {
                         newWave.push({
                             id: Date.now() + Math.random() + i,
                             x: (Math.random() - 0.5) * 20,
-                            y: Math.random() * 4 - 1,
-                            z: -30
+                            y: Math.random() * 6 - 3, // Range: -3 to 3
+                            z: -Math.random() * 20 - 30 // Range: -30 to -50
                         });
                     }
                     
@@ -69,25 +70,80 @@ function MyThree() {
         );
     }
 
+    function ProjectileSystem() {
+        useFrame(() => {
+            setProjectiles(prev => prev.map(projectile => ({
+                ...projectile,
+                z: projectile.z - 1
+            })).filter(projectile => projectile.z > -50));
+        });
+
+        const shootProjectile = () => {
+            const newProjectile = {
+                id: Date.now() + Math.random(),
+                x: position[0],
+                y: position[1],
+                z: position[2]
+            };
+            setProjectiles(prev => [...prev, newProjectile]);
+        };
+
+        useEffect(() => {
+            const handleClick = () => {
+                shootProjectile();
+            };
+
+            window.addEventListener('click', handleClick);
+            return () => window.removeEventListener('click', handleClick);
+        }, [position]);
+
+        return (
+            <>
+                {projectiles.map((projectile) => (
+                    <mesh
+                        key={projectile.id}
+                        position={[projectile.x, projectile.y, projectile.z]}
+                    >
+                        <sphereGeometry args={[0.1, 8, 8]} />
+                        <meshStandardMaterial color="#00ff00" emissive="#004400" />
+                    </mesh>
+                ))}
+            </>
+        );
+    }
+
     function MovementController() {
         useFrame(() => {
             let moved = false;
-
-            if (keyState.left || keyState.right) {
+            
+            if (keyState.left || keyState.right || keyState.up || keyState.down) {
                 const [x, y, z] = positionRef.current;
                 let newX = x;
+                let newY = y;
+                
                 if (keyState.left) newX -= 0.15;
                 if (keyState.right) newX += 0.15;
-                positionRef.current = [newX, y, z];
-                setPosition([newX, y, z]);
+                if (keyState.up) newY += 0.15;
+                if (keyState.down) newY -= 0.15;
+                
+                // Apply boundary checks
+                newX = Math.max(-10, Math.min(10, newX));  // Horizontal: -10 to 10
+                newY = Math.max(-3, Math.min(3, newY));    // Vertical: -3 to 3
+                
+                positionRef.current = [newX, newY, z];
+                setPosition([newX, newY, z]);
                 moved = true;
             }
 
-            const targetTilt = keyState.left ? -0.3 : keyState.right ? 0.3 : 0;
+            const targetTiltZ = keyState.left ? -0.3 : keyState.right ? 0.3 : 0;
+            const targetTiltX = keyState.up ? -0.2 : keyState.down ? 0.2 : 0;
             const tiltSpeed = 0.1;
-            const newTilt = tiltRef.current + (targetTilt - tiltRef.current) * tiltSpeed;
-            tiltRef.current = newTilt;
-            setTiltAngle(newTilt);
+            
+            const newTiltZ = tiltRef.current.z + (targetTiltZ - tiltRef.current.z) * tiltSpeed;
+            const newTiltX = tiltRef.current.x + (targetTiltX - tiltRef.current.x) * tiltSpeed;
+            
+            tiltRef.current = { x: newTiltX, z: newTiltZ };
+            setTiltAngle({ x: newTiltX, z: newTiltZ });
         });
 
         return null;
@@ -119,7 +175,7 @@ function MyThree() {
         useFrame(() => {
             if (meshRef.current) {
                 meshRef.current.position.set(...position);
-                meshRef.current.rotation.z = tiltAngle;
+                meshRef.current.rotation.set(tiltAngle.x, Math.PI, tiltAngle.z);
             }
         });
 
@@ -185,11 +241,23 @@ function MyThree() {
                 case 'd':
                     setKeyState(prev => ({ ...prev, right: true }));
                     break;
+                case 'w':
+                    setKeyState(prev => ({ ...prev, up: true }));
+                    break;
+                case 's':
+                    setKeyState(prev => ({ ...prev, down: true }));
+                    break;
                 case 'ArrowLeft':
                     setKeyState(prev => ({ ...prev, left: true }));
                     break;
                 case 'ArrowRight':
                     setKeyState(prev => ({ ...prev, right: true }));
+                    break;
+                case 'ArrowUp':
+                    setKeyState(prev => ({ ...prev, up: true }));
+                    break;
+                case 'ArrowDown':
+                    setKeyState(prev => ({ ...prev, down: true }));
                     break;
             }
         };
@@ -202,11 +270,23 @@ function MyThree() {
                 case 'd':
                     setKeyState(prev => ({ ...prev, right: false }));
                     break;
+                case 'w':
+                    setKeyState(prev => ({ ...prev, up: false }));
+                    break;
+                case 's':
+                    setKeyState(prev => ({ ...prev, down: false }));
+                    break;
                 case 'ArrowLeft':
                     setKeyState(prev => ({ ...prev, left: false }));
                     break;
                 case 'ArrowRight':
                     setKeyState(prev => ({ ...prev, right: false }));
+                    break;
+                case 'ArrowUp':
+                    setKeyState(prev => ({ ...prev, up: false }));
+                    break;
+                case 'ArrowDown':
+                    setKeyState(prev => ({ ...prev, down: false }));
                     break;
             }
         };
@@ -246,6 +326,7 @@ function MyThree() {
             <Canvas
                 camera={{ position: [0, 2, 5], fov: 75 }}
                 style={{ background: '#0000' }}
+                shadows
             >
                 <ambientLight intensity={0.4} />
                 <directionalLight
@@ -259,6 +340,7 @@ function MyThree() {
                 <Ground />
                 <StarField />
                 <ObstacleSystem />
+                <ProjectileSystem />
                 <CameraController />
                 <OrbitControls enabled={false} />
             </Canvas>
