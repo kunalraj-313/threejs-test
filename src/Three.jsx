@@ -1,6 +1,7 @@
 import React, { useRef, useEffect, useState } from 'react';
 import { Canvas, useLoader, useFrame, useThree } from '@react-three/fiber';
 import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader';
+import { MTLLoader } from 'three/examples/jsm/loaders/MTLLoader';
 import { OrbitControls } from '@react-three/drei';
 import * as THREE from 'three';
 
@@ -214,7 +215,11 @@ function MyThree() {
 
     function SpaceshipModel() {
         const meshRef = useRef();
-        const obj = useLoader(OBJLoader, '/models/spaceship.obj');
+        const materials = useLoader(MTLLoader, '/material/spaceship.mtl');
+        const obj = useLoader(OBJLoader, '/models/spaceship.obj', (loader) => {
+            materials.preload();
+            loader.setMaterials(materials);
+        });
 
         const clonedObj = obj.clone();
 
