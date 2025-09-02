@@ -299,6 +299,7 @@ function MyThree() {
         setGameOver(false);
         setShipHp(100);
         setScore(0);
+        setObstacleSpeed(0.1); 
         setPosition([0, 0, 0]);
         setObstacles([]);
         setProjectiles([]);
@@ -496,7 +497,7 @@ function MyThree() {
 
             <Canvas
                 camera={{ position: [0, 2, 5], fov: 75 }}
-                style={{ background: '#0000' }}
+                style={{ background: '#000000' }}
                 shadows
             >
                 {!gameOver && (
