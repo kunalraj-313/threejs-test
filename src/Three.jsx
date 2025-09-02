@@ -1,56 +1,96 @@
-
+import React, { useRef, useEffect, useState } from 'react';
+import { Canvas, useLoader, useFrame } from '@react-three/fiber';
+import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader';
+import { OrbitControls } from '@react-three/drei';
 import * as THREE from 'three';
 
-import { useEffect, useRef } from "react";
-import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader';
+function SpaceshipModel() {
+  const meshRef = useRef();
+  const [position, setPosition] = useState([0, 0, 0]);
+  const obj = useLoader(OBJLoader, '/models/spaceship.obj');
+  
+  // Clone the object to avoid modifying the original
+  const clonedObj = obj.clone();
+  
+  // Center and scale the object
+  const box = new THREE.Box3().setFromObject(clonedObj);
+  const center = box.getCenter(new THREE.Vector3());
+  clonedObj.position.sub(center);
+  
+  const size = box.getSize(new THREE.Vector3());
+  const maxDimension = Math.max(size.x, size.y, size.z);
+  const scale = 2 / maxDimension;
+  clonedObj.scale.setScalar(scale);
+  
+  clonedObj.rotation.y = Math.PI;
 
-function MyThree() {
-  const refContainer = useRef(null);
+  // Enable shadow casting for the spaceship
+  clonedObj.traverse((child) => {
+    if (child.isMesh) {
+      child.castShadow = true;
+    }
+  });
+
+  // Handle keyboard input
   useEffect(() => {
-    // === THREE.JS CODE START ===
-    var scene = new THREE.Scene();
-    var camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-    var renderer = new THREE.WebGLRenderer();
-    renderer.setSize(window.innerWidth, window.innerHeight);
-    // document.body.appendChild( renderer.domElement );
-    // use ref as a mount point of the Three.js scene instead of the document.body
-    refContainer.current && refContainer.current.appendChild( renderer.domElement );
-     const loader = new OBJLoader();
-    loader.load(
-      '/models/spaceship.obj', // path to your OBJ file
-      function (object) {
-        scene.add(object);
-      },
-      undefined,
-      function (error) {
-        console.error(error);
-      }
-    );
-
-
-    var geometry = new THREE.BoxGeometry(1, 1, 1);
-    var material = new THREE.MeshBasicMaterial({ color: 0x00ff00 });
-    var cube = new THREE.Mesh(geometry, material);
-    // scene.add(cube);
-  camera.position.set(0, 0, 5);
-  const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
-scene.add(ambientLight);
-
-const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
-directionalLight.position.set(10, 10, 10);
-scene.add(directionalLight);
-    var animate = function () {
-      requestAnimationFrame(animate);
-      cube.rotation.x += 0.01;
-      cube.rotation.y += 0.01;
-      renderer.render(scene, camera);
+    const handleKeyDown = (event) => {
+      setPosition((prev) => {
+        const [x, y, z] = prev;
+        switch (event.key) {
+          case 'ArrowLeft':
+            return [x - 0.1, y, z];
+          case 'ArrowRight':
+            return [x + 0.1, y, z];
+          default:
+            return prev;
+        }
+      });
     };
-    animate();
-  }, []);
-  return (
-    <div ref={refContainer}></div>
 
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
+  // Update object position
+  useFrame(() => {
+    if (meshRef.current) {
+      meshRef.current.position.set(...position);
+    }
+  });
+
+  return <primitive ref={meshRef} object={clonedObj} />;
+}
+
+function Ground() {
+  return (
+    <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -2, 0]} receiveShadow>
+      <planeGeometry args={[20, 20]} />
+      <meshStandardMaterial color="#ffffff" />
+    </mesh>
   );
 }
 
-export default MyThree
+function MyThree() {
+  return (
+    <div style={{ width: '100vw', height: '100vh' }}>
+      <Canvas
+        camera={{ position: [0, 2, 5], fov: 75 }}
+        style={{ background: '#222222' }}
+        shadows
+      >
+        <ambientLight intensity={0.4} />
+        <directionalLight 
+          position={[10, 10, 10]} 
+          intensity={1.2} 
+          castShadow
+          shadow-mapSize={[1024, 1024]}
+        />
+        <SpaceshipModel />
+        <Ground />
+        <OrbitControls />
+      </Canvas>
+    </div>
+  );
+}
+
+export default MyThree;
