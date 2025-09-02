@@ -321,6 +321,12 @@ function MyThree() {
     }, [gameOver]);
 
     useEffect(() => {
+        if (score > 0 && score % 200 === 0) {
+            setObstacleSpeed(prev => prev + 0.05);
+        }
+    }, [score]);
+
+    useEffect(() => {
         const handleKeyDown = (event) => {
             switch (event.key) {
                 case 'a':
