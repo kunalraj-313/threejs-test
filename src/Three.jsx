@@ -461,7 +461,7 @@ function MyThree() {
                         />
                         <MovementController />
                         <SpaceshipModel />
-                        <Ground />
+                        {/* <Ground /> */}
                         <StarField />
                         <ObstacleSystem />
                         <ProjectileSystem />
