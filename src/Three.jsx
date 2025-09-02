@@ -8,6 +8,32 @@ function MyThree() {
   const [position, setPosition] = useState([0, 0, 0]);
   const [keyState, setKeyState] = useState({ left: false, right: false });
   const [tiltAngle, setTiltAngle] = useState(0);
+const positionRef = useRef([0, 0, 0]);
+  const tiltRef = useRef(0);
+
+    function MovementController() {
+    useFrame(() => {
+      let moved = false;
+      
+      if (keyState.left || keyState.right) {
+        const [x, y, z] = positionRef.current;
+        let newX = x;
+        if (keyState.left) newX -= 0.15;
+        if (keyState.right) newX += 0.15;
+        positionRef.current = [newX, y, z];
+        setPosition([newX, y, z]);
+        moved = true;
+      }
+
+      const targetTilt = keyState.left ? -0.3 : keyState.right ? 0.3 : 0;
+      const tiltSpeed = 0.1;
+      const newTilt = tiltRef.current + (targetTilt - tiltRef.current) * tiltSpeed;
+      tiltRef.current = newTilt;
+      setTiltAngle(newTilt);
+    });
+    
+    return null;
+  }
 
   function SpaceshipModel() {
     const meshRef = useRef();
@@ -135,27 +161,27 @@ function StarField() {
     };
   }, []);
 
-  useEffect(() => {
-    const interval = setInterval(() => {
-      if (keyState.left || keyState.right) {
-        setPosition((prev) => {
-          const [x, y, z] = prev;
-          let newX = x;
-          if (keyState.left) newX -= 0.15;
-          if (keyState.right) newX += 0.15;
-          return [newX, y, z];
-        });
-      }
+//   useEffect(() => {
+//     const interval = setInterval(() => {
+//       if (keyState.left || keyState.right) {
+//         setPosition((prev) => {
+//           const [x, y, z] = prev;
+//           let newX = x;
+//           if (keyState.left) newX -= 0.15;
+//           if (keyState.right) newX += 0.15;
+//           return [newX, y, z];
+//         });
+//       }
 
-      setTiltAngle((prev) => {
-        const targetTilt = keyState.left ? -0.3 : keyState.right ? 0.3 : 0;
-        const tiltSpeed = 0.1;
-        return prev + (targetTilt - prev) * tiltSpeed;
-      });
-    }, 16);
+//       setTiltAngle((prev) => {
+//         const targetTilt = keyState.left ? -0.3 : keyState.right ? 0.3 : 0;
+//         const tiltSpeed = 0.1;
+//         return prev + (targetTilt - prev) * tiltSpeed;
+//       });
+//     }, 16);
 
-    return () => clearInterval(interval);
-  }, [keyState]);
+//     return () => clearInterval(interval);
+//   }, [keyState]);
 
   return (
     <div style={{ width: '100vw', height: '100vh' }}>
@@ -171,6 +197,7 @@ function StarField() {
           castShadow
           shadow-mapSize={[1024, 1024]}
         />
+        <MovementController/>
         <SpaceshipModel />
         <Ground />
         <StarField/>
