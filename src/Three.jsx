@@ -13,6 +13,7 @@ function MyThree() {
     const [projectiles, setProjectiles] = useState([]);
     const [shipHp, setShipHp] = useState(100);
     const [gameOver, setGameOver] = useState(false);
+    const [gameStarted, setGameStarted] = useState(false);
     const [score, setScore] = useState(0);
     const [obstacleSpeed, setObstacleSpeed] = useState(0.1);
     const [spawnInterval, setSpawnInterval] = useState(2000);
@@ -307,6 +308,21 @@ function MyThree() {
         return null;
     }
 
+    const startGame = () => {
+        setGameStarted(true);
+        setGameOver(false);
+        setShipHp(100);
+        setScore(0);
+        setObstacleSpeed(0.1); 
+        setPosition([0, 0, 0]);
+        setObstacles([]);
+        setProjectiles([]);
+        positionRef.current = [0, 0, 0];
+        tiltRef.current = { x: 0, z: 0 };
+        gameStartTime.current = Date.now();
+        lastScoreTime.current = Date.now();
+    };
+
     const restartGame = () => {
         setGameOver(false);
         setShipHp(100);
@@ -430,17 +446,90 @@ function MyThree() {
 
     return (
         <div style={{ width: '100vw', height: '100vh', position: 'relative' }}>
-            {/* HP Bar */}
-            <div style={{
-                position: 'absolute',
-                top: '20px',
-                left: '20px',
-                zIndex: 1000,
-                color: 'white',
-                fontSize: '20px',
-                fontFamily: 'Arial, sans-serif'
-            }}>
-                <div>HP: {shipHp}/100</div>
+            {/* Start Menu */}
+            {!gameStarted && (
+                <div style={{
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    width: '100%',
+                    height: '100%',
+                    backgroundColor: '#000000',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    justifyContent: 'center',
+                    alignItems: 'center',
+                    zIndex: 3000
+                }}>
+                    <div style={{
+                        textAlign: 'center',
+                        color: 'white',
+                        fontFamily: 'Arial, sans-serif'
+                    }}>
+                        <h1 style={{
+                            fontSize: '72px',
+                            margin: '0 0 20px 0',
+                            background: 'linear-gradient(45deg, #00ff00, #0080ff)',
+                            backgroundClip: 'text',
+                            WebkitBackgroundClip: 'text',
+                            WebkitTextFillColor: 'transparent',
+                            textShadow: '0 0 20px rgba(0, 255, 255, 0.5)'
+                        }}>
+                            SPACE SHOOTER
+                        </h1>
+                        <div style={{
+                            fontSize: '24px',
+                            marginBottom: '40px',
+                            opacity: '0.8'
+                        }}>
+                            🚀 Navigate • 🔫 Click to Shoot • ⭐ Survive
+                        </div>
+                        <button
+                            onClick={startGame}
+                            style={{
+                                fontSize: '32px',
+                                padding: '20px 40px',
+                                backgroundColor: 'transparent',
+                                border: '3px solid #00ff00',
+                                color: '#00ff00',
+                                borderRadius: '10px',
+                                cursor: 'pointer',
+                                fontFamily: 'Arial, sans-serif',
+                                fontWeight: 'bold',
+                                transition: 'all 0.3s ease',
+                                boxShadow: '0 0 20px rgba(0, 255, 0, 0.3)'
+                            }}
+                            onMouseEnter={(e) => {
+                                e.target.style.backgroundColor = '#00ff00';
+                                e.target.style.color = '#000000';
+                                e.target.style.boxShadow = '0 0 30px rgba(0, 255, 0, 0.6)';
+                            }}
+                            onMouseLeave={(e) => {
+                                e.target.style.backgroundColor = 'transparent';
+                                e.target.style.color = '#00ff00';
+                                e.target.style.boxShadow = '0 0 20px rgba(0, 255, 0, 0.3)';
+                            }}
+                        >
+                            START GAME
+                        </button>
+                    </div>
+                </div>
+            )}
+
+            {/* Game UI - only show when game is started */}
+            {gameStarted && (
+                <>
+                    {/* HP Bar */}
+                    <div style={{
+                        position: 'absolute',
+                        top: '20px',
+                        left: '20px',
+                        zIndex: 1000,
+                        color: 'white',
+                        fontSize: '20px',
+                        fontFamily: 'Arial, sans-serif'
+                    }}>
+                        <div>HP: {shipHp}/100</div>
                 <div style={{
                     width: '200px',
                     height: '20px',
@@ -476,43 +565,97 @@ function MyThree() {
 
             {/* Game Over Screen */}
             {gameOver && (
-                <div 
-                    style={{
-                        position: 'absolute',
-                        top: '50%',
-                        left: '50%',
-                        transform: 'translate(-50%, -50%)',
-                        zIndex: 2000,
-                        color: 'white',
-                        fontSize: '48px',
-                        fontFamily: 'Arial, sans-serif',
+                <div style={{
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    width: '100%',
+                    height: '100%',
+                    backgroundColor: 'rgba(0, 0, 0, 0.95)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    justifyContent: 'center',
+                    alignItems: 'center',
+                    zIndex: 3000
+                }}>
+                    <div style={{
                         textAlign: 'center',
-                        backgroundColor: 'rgba(0, 0, 0, 0.8)',
-                        padding: '40px',
-                        borderRadius: '10px',
-                        cursor: 'pointer'
-                    }}
-                    onClick={restartGame}
-                >
-                    <div>GAME OVER</div>
-                    <div style={{ fontSize: '32px', marginTop: '20px', color: '#ffff00' }}>
-                        Final Score: {score}
-                    </div>
-                    <div style={{ fontSize: '20px', marginTop: '10px', opacity: '0.8' }}>
-                        Time Survived: {Math.floor((Date.now() - gameStartTime.current) / 1000)}s
-                    </div>
-                    <div style={{ fontSize: '24px', marginTop: '20px' }}>
-                        Click to restart
+                        color: 'white',
+                        fontFamily: 'Arial, sans-serif'
+                    }}>
+                        <h1 style={{
+                            fontSize: '64px',
+                            margin: '0 0 20px 0',
+                            background: 'linear-gradient(45deg, #ff4444, #ff8844)',
+                            backgroundClip: 'text',
+                            WebkitBackgroundClip: 'text',
+                            WebkitTextFillColor: 'transparent',
+                            textShadow: '0 0 20px rgba(255, 68, 68, 0.5)'
+                        }}>
+                            GAME OVER
+                        </h1>
+                        
+                        <div style={{
+                            fontSize: '36px',
+                            margin: '20px 0',
+                            background: 'linear-gradient(45deg, #ffff00, #ffa500)',
+                            backgroundClip: 'text',
+                            WebkitBackgroundClip: 'text',
+                            WebkitTextFillColor: 'transparent',
+                            textShadow: '0 0 15px rgba(255, 255, 0, 0.5)'
+                        }}>
+                            Final Score: {score}
+                        </div>
+                        
+                        <div style={{
+                            fontSize: '20px',
+                            margin: '10px 0 40px 0',
+                            opacity: '0.8',
+                            color: '#cccccc'
+                        }}>
+                            🕐 Time Survived: {Math.floor((Date.now() - gameStartTime.current) / 1000)}s
+                        </div>
+                        
+                        <button
+                            onClick={restartGame}
+                            style={{
+                                fontSize: '28px',
+                                padding: '15px 35px',
+                                backgroundColor: 'transparent',
+                                border: '3px solid #ff4444',
+                                color: '#ff4444',
+                                borderRadius: '10px',
+                                cursor: 'pointer',
+                                fontFamily: 'Arial, sans-serif',
+                                fontWeight: 'bold',
+                                transition: 'all 0.3s ease',
+                                boxShadow: '0 0 20px rgba(255, 68, 68, 0.3)'
+                            }}
+                            onMouseEnter={(e) => {
+                                e.target.style.backgroundColor = '#ff4444';
+                                e.target.style.color = '#000000';
+                                e.target.style.boxShadow = '0 0 30px rgba(255, 68, 68, 0.6)';
+                            }}
+                            onMouseLeave={(e) => {
+                                e.target.style.backgroundColor = 'transparent';
+                                e.target.style.color = '#ff4444';
+                                e.target.style.boxShadow = '0 0 20px rgba(255, 68, 68, 0.3)';
+                            }}
+                        >
+                            PLAY AGAIN
+                        </button>
                     </div>
                 </div>
             )}
 
-            <Canvas
-                camera={{ position: [0, 2, 5], fov: 75 }}
-                style={{ background: '#000000' }}
-                shadows
-            >
-                {!gameOver && (
+            {/* 3D Canvas - only show when game is started */}
+            {gameStarted && (
+                <Canvas
+                    camera={{ position: [0, 2, 5], fov: 75 }}
+                    style={{ background: '#000000' }}
+                    shadows
+                >
+                    {!gameOver && (
                     <>
                         <ambientLight intensity={0.4} />
                         <directionalLight
@@ -532,6 +675,9 @@ function MyThree() {
                     </>
                 )}
             </Canvas>
+            )}
+                </>
+            )}
         </div>
     );
 }
