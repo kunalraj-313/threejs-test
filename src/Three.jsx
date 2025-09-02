@@ -9,6 +9,8 @@ function MyThree() {
     const [keyState, setKeyState] = useState({ left: false, right: false });
     const [tiltAngle, setTiltAngle] = useState(0);
     const [obstacles, setObstacles] = useState([]);
+    const [obstacleSpeed, setObstacleSpeed] = useState(0.2);
+    const [spawnInterval, setSpawnInterval] = useState(2000);
     const positionRef = useRef([0, 0, 0]);
     const tiltRef = useRef(0);
 
@@ -16,27 +18,40 @@ function MyThree() {
 
     function ObstacleSystem() {
         const obstacleRefs = useRef([]);
+        const lastSpawnTime = useRef(0);
 
         useFrame(() => {
-            setObstacles(prev => prev.map(obstacle => ({
-                ...obstacle,
-                z: obstacle.z + 0.2
-            })).filter(obstacle => obstacle.z < 10));
+            const currentTime = Date.now();
+            
+            setObstacles(prev => {
+                const newObstacles = prev.map(obstacle => ({
+                    ...obstacle,
+                    z: obstacle.z + obstacleSpeed
+                }));
+                
+                const filteredObstacles = newObstacles.filter(obstacle => obstacle.z < 10);
+                
+                if (filteredObstacles.length === 0) {
+                    
+                    const numberOfObstacles = Math.floor(Math.random() * 10) + 1;
+                    const newWave = [];
+                    
+                    for (let i = 0; i < numberOfObstacles; i++) {
+                        newWave.push({
+                            id: Date.now() + Math.random() + i,
+                            x: (Math.random() - 0.5) * 20,
+                            y: Math.random() * 4 - 1,
+                            z: -30
+                        });
+                    }
+                    
+                    lastSpawnTime.current = currentTime;
+                    return newWave;
+                }
+                
+                return filteredObstacles;
+            });
         });
-
-        useEffect(() => {
-            const spawnInterval = setInterval(() => {
-                const newObstacle = {
-                    id: Date.now() + Math.random(),
-                    x: (Math.random() - 0.5) * 15,
-                    y: Math.random() * 3 - 1,
-                    z: -5
-                };
-                setObstacles(prev => [...prev, newObstacle]);
-            }, 800);
-
-            return () => clearInterval(spawnInterval);
-        }, []);
 
         return (
             <>
