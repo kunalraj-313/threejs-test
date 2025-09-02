@@ -12,10 +12,13 @@ function MyThree() {
     const [projectiles, setProjectiles] = useState([]);
     const [shipHp, setShipHp] = useState(100);
     const [gameOver, setGameOver] = useState(false);
+    const [score, setScore] = useState(0);
     const [obstacleSpeed, setObstacleSpeed] = useState(0.1);
     const [spawnInterval, setSpawnInterval] = useState(2000);
     const positionRef = useRef([0, 0, 0]);
     const tiltRef = useRef({ x: 0, z: 0 });
+    const gameStartTime = useRef(Date.now());
+    const lastScoreTime = useRef(Date.now());
 
 
 
@@ -103,6 +106,8 @@ function MyThree() {
                         
                         if (distance < 0.6) {
                             newObstacle.hp = Math.max(0, newObstacle.hp - 5);
+                            // Add 5 points for each hit
+                            setScore(prev => prev + 5);
                             // Remove the projectile that hit
                             setProjectiles(prev => prev.filter(p => p.id !== projectile.id));
                         }
@@ -293,12 +298,27 @@ function MyThree() {
     const restartGame = () => {
         setGameOver(false);
         setShipHp(100);
+        setScore(0);
         setPosition([0, 0, 0]);
         setObstacles([]);
         setProjectiles([]);
         positionRef.current = [0, 0, 0];
         tiltRef.current = { x: 0, z: 0 };
+        gameStartTime.current = Date.now();
+        lastScoreTime.current = Date.now();
     };
+
+    // Time-based scoring system
+    useEffect(() => {
+        if (gameOver) return;
+
+        const scoreInterval = setInterval(() => {
+            setScore(prev => prev + 1);
+            lastScoreTime.current = Date.now();
+        }, 1000);
+
+        return () => clearInterval(scoreInterval);
+    }, [gameOver]);
 
     useEffect(() => {
         const handleKeyDown = (event) => {
@@ -418,6 +438,23 @@ function MyThree() {
                 </div>
             </div>
 
+            {/* Score Display */}
+            <div style={{
+                position: 'absolute',
+                top: '20px',
+                right: '20px',
+                zIndex: 1000,
+                color: 'white',
+                fontSize: '24px',
+                fontFamily: 'Arial, sans-serif',
+                textAlign: 'right'
+            }}>
+                <div>Score: {score}</div>
+                <div style={{ fontSize: '16px', marginTop: '5px', opacity: '0.8' }}>
+                    Time: {Math.floor((Date.now() - gameStartTime.current) / 1000)}s
+                </div>
+            </div>
+
             {/* Game Over Screen */}
             {gameOver && (
                 <div 
@@ -439,6 +476,12 @@ function MyThree() {
                     onClick={restartGame}
                 >
                     <div>GAME OVER</div>
+                    <div style={{ fontSize: '32px', marginTop: '20px', color: '#ffff00' }}>
+                        Final Score: {score}
+                    </div>
+                    <div style={{ fontSize: '20px', marginTop: '10px', opacity: '0.8' }}>
+                        Time Survived: {Math.floor((Date.now() - gameStartTime.current) / 1000)}s
+                    </div>
                     <div style={{ fontSize: '24px', marginTop: '20px' }}>
                         Click to restart
                     </div>
