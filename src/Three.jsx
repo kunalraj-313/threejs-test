@@ -4,6 +4,8 @@ import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader';
 import { MTLLoader } from 'three/examples/jsm/loaders/MTLLoader';
 import { OrbitControls } from '@react-three/drei';
 import * as THREE from 'three';
+import { supabase } from './supabase';
+import Filter from 'bad-words';
 
 function MyThree() {
     const [position, setPosition] = useState([0, 0, 0]);
@@ -14,6 +16,9 @@ function MyThree() {
     const [shipHp, setShipHp] = useState(100);
     const [gameOver, setGameOver] = useState(false);
     const [gameStarted, setGameStarted] = useState(false);
+    const [showNameInput, setShowNameInput] = useState(false);
+    const [playerName, setPlayerName] = useState('');
+    const [leaderboard, setLeaderboard] = useState([]);
     const [score, setScore] = useState(0);
     const [obstacleSpeed, setObstacleSpeed] = useState(0.1);
     const [spawnInterval, setSpawnInterval] = useState(2000);
@@ -21,6 +26,9 @@ function MyThree() {
     const tiltRef = useRef({ x: 0, z: 0 });
     const gameStartTime = useRef(Date.now());
     const lastScoreTime = useRef(Date.now());
+
+    // Initialize profanity filter
+    const filter = new Filter();
 
 
 
@@ -200,7 +208,7 @@ function MyThree() {
                         setShipHp(prev => {
                             const newHp = Math.max(0, prev - obstacle.hp);
                             if (newHp === 0) {
-                                setGameOver(true);
+                                setShowNameInput(true);
                             }
                             return newHp;
                         });
@@ -308,6 +316,58 @@ function MyThree() {
         return null;
     }
 
+    // Leaderboard functions
+    const fetchLeaderboard = async () => {
+        try {
+            const { data, error } = await supabase
+                .from('space_shooter')
+                .select('*')
+                .order('score', { ascending: false })
+                .limit(10);
+            
+            if (error) throw error;
+            setLeaderboard(data || []);
+        } catch (error) {
+            console.error('Error fetching leaderboard:', error);
+        }
+    };
+
+    const saveScore = async (name, finalScore, timeElapsed) => {
+        try {
+            const { error } = await supabase
+                .from('space_shooter')
+                .insert([
+                    { 
+                        name: name, 
+                        score: finalScore, 
+                        time_elapsed: timeElapsed 
+                    }
+                ]);
+            
+            if (error) throw error;
+            fetchLeaderboard(); // Refresh leaderboard after saving
+        } catch (error) {
+            console.error('Error saving score:', error);
+        }
+    };
+
+    const handleNameSubmit = async () => {
+        if (playerName.trim()) {
+            // Apply profanity filter to the name
+            const filteredName = filter.clean(playerName.trim());
+            const timeElapsed = Math.floor((Date.now() - gameStartTime.current) / 1000);
+            await saveScore(filteredName, score, timeElapsed);
+            setShowNameInput(false);
+            setPlayerName('');
+            setGameOver(true);
+        }
+    };
+
+    // Load leaderboard on component mount
+    useEffect(() => {
+        fetchLeaderboard();
+    }, []);
+
     const startGame = () => {
         setGameStarted(true);
         setGameOver(false);
@@ -325,6 +385,8 @@ function MyThree() {
 
     const restartGame = () => {
         setGameOver(false);
+        setShowNameInput(false);
+        setPlayerName('');
         setShipHp(100);
         setScore(0);
         setObstacleSpeed(0.1); 
@@ -446,6 +508,54 @@ function MyThree() {
 
     return (
         <div style={{ width: '100vw', height: '100vh', position: 'relative' }}>
+            {/* Leaderboard - Positioned under HP bar */}
+            <div style={{
+                position: 'absolute',
+                top: '115px',
+                left: '20px',
+                width: '250px',
+                zIndex: 1500,
+                backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                border: '2px solid #00ff00',
+                borderRadius: '10px',
+                padding: '15px',
+                color: 'white',
+                fontFamily: 'Arial, sans-serif',
+                fontSize: '14px'
+            }}>
+                <h3 style={{ 
+                    margin: '0 0 15px 0', 
+                    color: '#00ff00', 
+                    textAlign: 'center',
+                    fontSize: '18px'
+                }}>
+                    🏆 LEADERBOARD
+                </h3>
+                {leaderboard.length > 0 ? (
+                    <div>
+                        {leaderboard.map((entry, index) => (
+                            <div key={entry.id} style={{
+                                display: 'flex',
+                                justifyContent: 'space-between',
+                                padding: '5px 0',
+                                borderBottom: index < leaderboard.length - 1 ? '1px solid #333' : 'none'
+                            }}>
+                                <span style={{ color: index === 0 ? '#ffd700' : index === 1 ? '#c0c0c0' : index === 2 ? '#cd7f32' : '#ffffff' }}>
+                                    {index + 1}. {entry.name}
+                                </span>
+                                <span style={{ color: '#00ff00' }}>
+                                    {entry.score}
+                                </span>
+                            </div>
+                        ))}
+                    </div>
+                ) : (
+                    <div style={{ textAlign: 'center', opacity: 0.7 }}>
+                        No scores yet
+                    </div>
+                )}
+            </div>
+
             {/* Start Menu */}
             {!gameStarted && (
                 <div style={{
@@ -461,6 +571,53 @@ function MyThree() {
                     alignItems: 'center',
                     zIndex: 3000
                 }}>
+                    {/* Leaderboard on Start Menu */}
+                    <div style={{
+                        position: 'absolute',
+                        top: '20px',
+                        left: '20px',
+                        width: '250px',
+                        backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                        border: '2px solid #00ff00',
+                        borderRadius: '10px',
+                        padding: '15px',
+                        color: 'white',
+                        fontFamily: 'Arial, sans-serif',
+                        fontSize: '14px'
+                    }}>
+                        <h3 style={{ 
+                            margin: '0 0 15px 0', 
+                            color: '#00ff00', 
+                            textAlign: 'center',
+                            fontSize: '18px'
+                        }}>
+                            🏆 LEADERBOARD
+                        </h3>
+                        {leaderboard.length > 0 ? (
+                            <div>
+                                {leaderboard.map((entry, index) => (
+                                    <div key={entry.id} style={{
+                                        display: 'flex',
+                                        justifyContent: 'space-between',
+                                        padding: '5px 0',
+                                        borderBottom: index < leaderboard.length - 1 ? '1px solid #333' : 'none'
+                                    }}>
+                                        <span style={{ color: index === 0 ? '#ffd700' : index === 1 ? '#c0c0c0' : index === 2 ? '#cd7f32' : '#ffffff' }}>
+                                            {index + 1}. {entry.name}
+                                        </span>
+                                        <span style={{ color: '#00ff00' }}>
+                                            {entry.score}
+                                        </span>
+                                    </div>
+                                ))}
+                            </div>
+                        ) : (
+                            <div style={{ textAlign: 'center', opacity: 0.7 }}>
+                                No scores yet
+                            </div>
+                        )}
+                    </div>
+
                     <div style={{
                         textAlign: 'center',
                         color: 'white',
@@ -562,6 +719,121 @@ function MyThree() {
                     Time: {Math.floor((Date.now() - gameStartTime.current) / 1000)}s
                 </div>
             </div>
+
+            {/* Name Input Screen */}
+            {showNameInput && (
+                <div style={{
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    width: '100%',
+                    height: '100%',
+                    backgroundColor: 'rgba(0, 0, 0, 0.95)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    justifyContent: 'center',
+                    alignItems: 'center',
+                    zIndex: 3000
+                }}>
+                    <div style={{
+                        textAlign: 'center',
+                        color: 'white',
+                        fontFamily: 'Arial, sans-serif'
+                    }}>
+                        <h1 style={{
+                            fontSize: '48px',
+                            margin: '0 0 20px 0',
+                            background: 'linear-gradient(45deg, #00ff00, #0080ff)',
+                            backgroundClip: 'text',
+                            WebkitBackgroundClip: 'text',
+                            WebkitTextFillColor: 'transparent',
+                            textShadow: '0 0 20px rgba(0, 255, 255, 0.5)'
+                        }}>
+                            🏆 NEW HIGH SCORE!
+                        </h1>
+                        
+                        <div style={{
+                            fontSize: '28px',
+                            margin: '20px 0',
+                            color: '#ffff00'
+                        }}>
+                            Score: {score}
+                        </div>
+                        
+                        <div style={{
+                            fontSize: '18px',
+                            margin: '20px 0 40px 0',
+                            opacity: '0.8',
+                            color: '#cccccc'
+                        }}>
+                            Enter your name for the leaderboard:
+                        </div>
+                        
+                        <input
+                            type="text"
+                            value={playerName}
+                            onChange={(e) => setPlayerName(e.target.value)}
+                            onKeyPress={(e) => e.key === 'Enter' && handleNameSubmit()}
+                            placeholder="Your Name"
+                            maxLength={20}
+                            style={{
+                                fontSize: '24px',
+                                padding: '15px 20px',
+                                margin: '0 0 30px 0',
+                                backgroundColor: 'transparent',
+                                border: '3px solid #00ff00',
+                                borderRadius: '10px',
+                                color: 'white',
+                                textAlign: 'center',
+                                outline: 'none',
+                                width: '300px'
+                            }}
+                            autoFocus
+                        />
+                        
+                        <div style={{ display: 'flex', gap: '20px', justifyContent: 'center' }}>
+                            <button
+                                onClick={handleNameSubmit}
+                                disabled={!playerName.trim()}
+                                style={{
+                                    fontSize: '20px',
+                                    padding: '15px 30px',
+                                    backgroundColor: playerName.trim() ? '#00ff00' : 'transparent',
+                                    border: '3px solid #00ff00',
+                                    color: playerName.trim() ? '#000000' : '#00ff00',
+                                    borderRadius: '10px',
+                                    cursor: playerName.trim() ? 'pointer' : 'not-allowed',
+                                    fontFamily: 'Arial, sans-serif',
+                                    fontWeight: 'bold',
+                                    opacity: playerName.trim() ? 1 : 0.5
+                                }}
+                            >
+                                SAVE SCORE
+                            </button>
+                            
+                            <button
+                                onClick={() => {
+                                    setShowNameInput(false);
+                                    setGameOver(true);
+                                }}
+                                style={{
+                                    fontSize: '20px',
+                                    padding: '15px 30px',
+                                    backgroundColor: 'transparent',
+                                    border: '3px solid #ff4444',
+                                    color: '#ff4444',
+                                    borderRadius: '10px',
+                                    cursor: 'pointer',
+                                    fontFamily: 'Arial, sans-serif',
+                                    fontWeight: 'bold'
+                                }}
+                            >
+                                SKIP
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* Game Over Screen */}
             {gameOver && (
