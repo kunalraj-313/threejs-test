@@ -5,7 +5,8 @@ import { MTLLoader } from 'three/examples/jsm/loaders/MTLLoader';
 import { OrbitControls } from '@react-three/drei';
 import * as THREE from 'three';
 import { supabase } from './supabase';
-import Filter from 'bad-words';
+import { Filter } from "bad-words";
+
 
 function MyThree() {
     const [position, setPosition] = useState([0, 0, 0]);
