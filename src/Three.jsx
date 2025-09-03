@@ -21,15 +21,104 @@ function MyThree() {
     const [playerName, setPlayerName] = useState('');
     const [leaderboard, setLeaderboard] = useState([]);
     const [score, setScore] = useState(0);
+    const [isMuted, setIsMuted] = useState(false);
+    const [volume, setVolume] = useState(0.5);
+    const [isPlaying, setIsPlaying] = useState(false);
+    const [gamePaused, setGamePaused] = useState(false);
     const [obstacleSpeed, setObstacleSpeed] = useState(0.1);
     const [spawnInterval, setSpawnInterval] = useState(2000);
     const positionRef = useRef([0, 0, 0]);
     const tiltRef = useRef({ x: 0, z: 0 });
     const gameStartTime = useRef(Date.now());
     const lastScoreTime = useRef(Date.now());
+    const audioRef = useRef(null);
+    const audioContextRef = useRef(null);
+    const lastShootTime = useRef(0);
+    const lastDamageTime = useRef(0);
 
     // Initialize profanity filter
     const filter = new Filter();
+
+    // Initialize AudioContext once
+    const getAudioContext = () => {
+        if (!audioContextRef.current) {
+            try {
+                audioContextRef.current = new (window.AudioContext || window.webkitAudioContext)();
+            } catch (error) {
+                // AudioContext not supported
+            }
+        }
+        return audioContextRef.current;
+    };
+
+    // Sound effect functions using shared Web Audio API context
+    const playShootSound = () => {
+        if (isMuted) return;
+        
+        // Throttle shoot sound to prevent spam
+        const now = Date.now();
+        if (now - lastShootTime.current < 100) return;
+        lastShootTime.current = now;
+        
+        try {
+            const audioContext = getAudioContext();
+            if (!audioContext || audioContext.state === 'suspended') {
+                audioContext?.resume();
+                return;
+            }
+
+            const oscillator = audioContext.createOscillator();
+            const gainNode = audioContext.createGain();
+            
+            oscillator.connect(gainNode);
+            gainNode.connect(audioContext.destination);
+            
+            oscillator.frequency.setValueAtTime(800, audioContext.currentTime);
+            oscillator.frequency.exponentialRampToValueAtTime(400, audioContext.currentTime + 0.1);
+            
+            gainNode.gain.setValueAtTime(0.3 * volume, audioContext.currentTime);
+            gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.1);
+            
+            oscillator.start(audioContext.currentTime);
+            oscillator.stop(audioContext.currentTime + 0.1);
+        } catch (error) {
+            // Sound effect failed
+        }
+    };
+
+    const playDamageSound = () => {
+        if (isMuted) return;
+        
+        // Throttle damage sound to prevent spam
+        const now = Date.now();
+        if (now - lastDamageTime.current < 200) return;
+        lastDamageTime.current = now;
+        
+        try {
+            const audioContext = getAudioContext();
+            if (!audioContext || audioContext.state === 'suspended') {
+                audioContext?.resume();
+                return;
+            }
+
+            const oscillator = audioContext.createOscillator();
+            const gainNode = audioContext.createGain();
+            
+            oscillator.connect(gainNode);
+            gainNode.connect(audioContext.destination);
+            
+            oscillator.frequency.setValueAtTime(200, audioContext.currentTime);
+            oscillator.frequency.exponentialRampToValueAtTime(100, audioContext.currentTime + 0.3);
+            
+            gainNode.gain.setValueAtTime(0.4 * volume, audioContext.currentTime);
+            gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.3);
+            
+            oscillator.start(audioContext.currentTime);
+            oscillator.stop(audioContext.currentTime + 0.3);
+        } catch (error) {
+            // Sound effect failed
+        }
+    };
 
 
 
@@ -38,6 +127,8 @@ function MyThree() {
         const lastSpawnTime = useRef(0);
 
         useFrame(() => {
+            if (gamePaused || gameOver) return;
+            
             const currentTime = Date.now();
             
             setObstacles(prev => {
@@ -96,6 +187,8 @@ function MyThree() {
 
     function ProjectileSystem() {
         useFrame(() => {
+            if (gamePaused || gameOver) return;
+            
             setProjectiles(prev => {
                 return prev.map(projectile => ({
                     ...projectile,
@@ -137,6 +230,7 @@ function MyThree() {
                 z: position[2]
             };
             setProjectiles(prev => [...prev, newProjectile]);
+            playShootSound(); // Play shoot sound effect
         };
 
         useEffect(() => {
@@ -165,6 +259,8 @@ function MyThree() {
 
     function MovementController() {
         useFrame(() => {
+            if (gamePaused || gameOver) return;
+            
             let moved = false;
             
             if (keyState.left || keyState.right || keyState.up || keyState.down) {
@@ -206,6 +302,7 @@ function MyThree() {
                     );
                     
                     if (distance < 0.8) {
+                        playDamageSound(); // Play damage sound effect
                         setShipHp(prev => {
                             const newHp = Math.max(0, prev - obstacle.hp);
                             if (newHp === 0) {
@@ -364,14 +461,86 @@ function MyThree() {
         }
     };
 
+    // Audio control functions
+    const initAudio = () => {
+        if (audioRef.current) {
+            audioRef.current.volume = volume;
+            audioRef.current.loop = true;
+            audioRef.current.preload = 'auto';
+        }
+    };
+
+    const playMusic = async () => {
+        try {
+            if (audioRef.current && audioRef.current.readyState >= 2) {
+                // Reset to beginning if needed
+                audioRef.current.currentTime = 0;
+                await audioRef.current.play();
+                setIsPlaying(true);
+            } else {
+                // Try again in a moment
+                setTimeout(() => playMusic(), 100);
+            }
+        } catch (error) {
+            // For autoplay restrictions, we'll need user interaction
+            if (error.name === 'NotAllowedError') {
+                // Autoplay blocked - user interaction required
+            }
+        }
+    };
+
+    const pauseMusic = () => {
+        if (audioRef.current) {
+            audioRef.current.pause();
+            setIsPlaying(false);
+        }
+    };
+
+    const toggleMute = () => {
+        if (audioRef.current) {
+            audioRef.current.muted = !isMuted;
+            setIsMuted(!isMuted);
+        }
+    };
+
+    const handleVolumeChange = (newVolume) => {
+        const vol = newVolume / 100;
+        setVolume(vol);
+        if (audioRef.current) {
+            audioRef.current.volume = vol;
+        }
+    };
+
+    // Initialize audio when component mounts
+    useEffect(() => {
+        initAudio();
+    }, []);
+
+    // Re-initialize audio when ref becomes available
+    useEffect(() => {
+        if (audioRef.current) {
+            initAudio();
+        }
+    }, [audioRef.current]);
+
     // Load leaderboard on component mount
     useEffect(() => {
         fetchLeaderboard();
     }, []);
 
-    const startGame = () => {
+    // Cleanup AudioContext on unmount
+    useEffect(() => {
+        return () => {
+            if (audioContextRef.current) {
+                audioContextRef.current.close();
+            }
+        };
+    }, []);
+
+    const startGame = async () => {
         setGameStarted(true);
         setGameOver(false);
+        setGamePaused(false);
         setShipHp(100);
         setScore(0);
         setObstacleSpeed(0.1); 
@@ -382,15 +551,31 @@ function MyThree() {
         tiltRef.current = { x: 0, z: 0 };
         gameStartTime.current = Date.now();
         lastScoreTime.current = Date.now();
+        
+        // Start music immediately with user interaction context
+        if (!isMuted) {
+            try {
+                if (audioRef.current) {
+                    audioRef.current.currentTime = 0;
+                    audioRef.current.volume = volume;
+                    const playPromise = audioRef.current.play();
+                    await playPromise;
+                    setIsPlaying(true);
+                }
+            } catch (error) {
+                setIsPlaying(false);
+            }
+        }
     };
 
-    const restartGame = () => {
+    const restartGame = async () => {
         setGameOver(false);
+        setGamePaused(false);
         setShowNameInput(false);
         setPlayerName('');
         setShipHp(100);
         setScore(0);
-        setObstacleSpeed(0.1); 
+        setObstacleSpeed(0.1);
         setPosition([0, 0, 0]);
         setObstacles([]);
         setProjectiles([]);
@@ -398,11 +583,47 @@ function MyThree() {
         tiltRef.current = { x: 0, z: 0 };
         gameStartTime.current = Date.now();
         lastScoreTime.current = Date.now();
+        
+        // Restart music
+        try {
+            if (audioRef.current) {
+                audioRef.current.currentTime = 0;
+                await audioRef.current.play();
+                setIsPlaying(true);
+            }
+        } catch (error) {
+            // Failed to restart music
+        }
+    };    const pauseGame = () => {
+        setGamePaused(true);
+        pauseMusic();
+    };
+
+    const unpauseGame = async () => {
+        setGamePaused(false);
+        if (!isMuted && audioRef.current) {
+            try {
+                await audioRef.current.play();
+                setIsPlaying(true);
+            } catch (error) {
+                // Failed to resume music
+            }
+        }
+    };
+
+    const togglePause = () => {
+        if (gameStarted && !gameOver) {
+            if (gamePaused) {
+                unpauseGame();
+            } else {
+                pauseGame();
+            }
+        }
     };
 
     // Time-based scoring system
     useEffect(() => {
-        if (gameOver) return;
+        if (gameOver || gamePaused) return;
 
         const scoreInterval = setInterval(() => {
             setScore(prev => prev + 1);
@@ -410,7 +631,7 @@ function MyThree() {
         }, 1000);
 
         return () => clearInterval(scoreInterval);
-    }, [gameOver]);
+    }, [gameOver, gamePaused]);
 
     useEffect(() => {
         if (score > 0 && score % 200 === 0) {
@@ -421,6 +642,9 @@ function MyThree() {
     useEffect(() => {
         const handleKeyDown = (event) => {
             switch (event.key) {
+                case 'Escape':
+                    togglePause();
+                    break;
                 case 'a':
                     setKeyState(prev => ({ ...prev, left: true }));
                     break;
@@ -509,6 +733,16 @@ function MyThree() {
 
     return (
         <div style={{ width: '100vw', height: '100vh', position: 'relative' }}>
+            {/* Audio Element - Always present but hidden */}
+            <audio
+                ref={audioRef}
+                src="/audio/spaceshooter-music.mp3"
+                loop
+                preload="auto"
+                onLoadedData={initAudio}
+                style={{ display: 'none' }}
+            />
+            
             {/* Leaderboard - Positioned under HP bar */}
             <div style={{
                 position: 'absolute',
@@ -719,7 +953,81 @@ function MyThree() {
                 <div style={{ fontSize: '16px', marginTop: '5px', opacity: '0.8' }}>
                     Time: {Math.floor((Date.now() - gameStartTime.current) / 1000)}s
                 </div>
+                {gamePaused && (
+                    <div style={{ 
+                        fontSize: '20px', 
+                        marginTop: '10px', 
+                        color: '#ffff00',
+                        fontWeight: 'bold',
+                        textShadow: '0 0 10px rgba(255,255,0,0.5)'
+                    }}>
+                        PAUSED
+                        <div style={{ fontSize: '14px', marginTop: '5px' }}>
+                            Press ESC to continue
+                        </div>
+                    </div>
+                )}
             </div>
+
+            {/* Audio Controls */}
+            {gameStarted && (
+                    <div style={{
+                        position: 'absolute',
+                        top: '100px',
+                        right: '20px',
+                        zIndex: 1000,
+                        color: 'white',
+                        fontFamily: 'Arial, sans-serif',
+                        textAlign: 'right',
+                        backgroundColor: 'rgba(0, 0, 0, 0.7)',
+                        padding: '10px',
+                        borderRadius: '8px',
+                        border: '1px solid rgba(255, 255, 255, 0.3)'
+                    }}>
+                        <div style={{ fontSize: '14px', marginBottom: '8px', opacity: '0.9' }}>
+                            🎵 Audio Controls
+                        </div>
+                        
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
+                            <button
+                                onClick={toggleMute}
+                                style={{
+                                    background: 'transparent',
+                                    border: '1px solid #00ff00',
+                                    color: isMuted ? '#ff4444' : '#00ff00',
+                                    borderRadius: '4px',
+                                    padding: '4px 8px',
+                                    cursor: 'pointer',
+                                    fontSize: '12px'
+                                }}
+                            >
+                                {isMuted ? '🔇' : '🔊'}
+                            </button>
+                        </div>
+                        
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <span style={{ fontSize: '12px', opacity: '0.8' }}>Vol:</span>
+                            <input
+                                type="range"
+                                min="0"
+                                max="100"
+                                value={volume * 100}
+                                onChange={(e) => handleVolumeChange(e.target.value)}
+                                style={{
+                                    width: '80px',
+                                    height: '4px',
+                                    background: '#333',
+                                    outline: 'none',
+                                    borderRadius: '2px',
+                                    cursor: 'pointer'
+                                }}
+                            />
+                            <span style={{ fontSize: '12px', opacity: '0.8', minWidth: '35px' }}>
+                                {Math.round(volume * 100)}%
+                            </span>
+                        </div>
+                    </div>
+            )}
 
             {/* Name Input Screen */}
             {showNameInput && (
