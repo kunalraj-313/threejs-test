@@ -10,7 +10,8 @@ import { Filter } from "bad-words";
 
 function MyThree() {
     const [position, setPosition] = useState([0, 0, 0]);
-    const [keyState, setKeyState] = useState({ left: false, right: false, up: false, down: false });
+    const [keyState, setKeyState] = useState({ left: false, right: false, up: false, down: false, shoot: false });
+    const [mousePressed, setMousePressed] = useState(false);
     const [tiltAngle, setTiltAngle] = useState({ x: 0, z: 0 });
     const [obstacles, setObstacles] = useState([]);
     const [projectiles, setProjectiles] = useState([]);
@@ -35,6 +36,8 @@ function MyThree() {
     const audioContextRef = useRef(null);
     const lastShootTime = useRef(0);
     const lastDamageTime = useRef(0);
+    const shootingIntervalRef = useRef(null);
+    const activeOscillatorsRef = useRef([]);
 
     // Initialize profanity filter
     const filter = new Filter();
@@ -53,7 +56,7 @@ function MyThree() {
 
     // Sound effect functions using shared Web Audio API context
     const playShootSound = () => {
-        if (isMuted) return;
+        if (isMuted || gameOver) return;
         
         // Throttle shoot sound to prevent spam
         const now = Date.now();
@@ -79,6 +82,17 @@ function MyThree() {
             gainNode.gain.setValueAtTime(0.3 * volume, audioContext.currentTime);
             gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.1);
             
+            // Track the oscillator
+            activeOscillatorsRef.current.push(oscillator);
+            
+            // Auto-remove from tracking when it ends
+            oscillator.onended = () => {
+                const index = activeOscillatorsRef.current.indexOf(oscillator);
+                if (index > -1) {
+                    activeOscillatorsRef.current.splice(index, 1);
+                }
+            };
+            
             oscillator.start(audioContext.currentTime);
             oscillator.stop(audioContext.currentTime + 0.1);
         } catch (error) {
@@ -87,7 +101,7 @@ function MyThree() {
     };
 
     const playDamageSound = () => {
-        if (isMuted) return;
+        if (isMuted || gameOver) return;
         
         // Throttle damage sound to prevent spam
         const now = Date.now();
@@ -112,6 +126,17 @@ function MyThree() {
             
             gainNode.gain.setValueAtTime(0.4 * volume, audioContext.currentTime);
             gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.3);
+            
+            // Track the oscillator
+            activeOscillatorsRef.current.push(oscillator);
+            
+            // Auto-remove from tracking when it ends
+            oscillator.onended = () => {
+                const index = activeOscillatorsRef.current.indexOf(oscillator);
+                if (index > -1) {
+                    activeOscillatorsRef.current.splice(index, 1);
+                }
+            };
             
             oscillator.start(audioContext.currentTime);
             oscillator.stop(audioContext.currentTime + 0.3);
@@ -225,22 +250,50 @@ function MyThree() {
         const shootProjectile = () => {
             const newProjectile = {
                 id: Date.now() + Math.random(),
-                x: position[0],
-                y: position[1],
-                z: position[2]
+                x: positionRef.current[0],
+                y: positionRef.current[1],
+                z: positionRef.current[2]
             };
             setProjectiles(prev => [...prev, newProjectile]);
             playShootSound(); // Play shoot sound effect
         };
 
+        const startShooting = () => {
+            if (shootingIntervalRef.current) return; // Already shooting
+            
+            shootProjectile(); // Shoot immediately
+            shootingIntervalRef.current = setInterval(() => {
+                shootProjectile();
+            }, 150); // Shoot every 150ms while held
+        };
+
+        const stopShooting = () => {
+            if (shootingIntervalRef.current) {
+                clearInterval(shootingIntervalRef.current);
+                shootingIntervalRef.current = null;
+            }
+        };
+
+        useFrame(() => {
+            // Check if we should be shooting based on input states
+            if ((keyState.shoot || mousePressed) && gameStarted && !gameOver && !gamePaused) {
+                if (!shootingIntervalRef.current) {
+                    startShooting();
+                }
+            } else {
+                stopShooting();
+            }
+        });
+
         useEffect(() => {
             const handleClick = () => {
+                if (!gameStarted || gameOver || gamePaused) return;
                 shootProjectile();
             };
 
             window.addEventListener('click', handleClick);
             return () => window.removeEventListener('click', handleClick);
-        }, [position]);
+        }, [position, gameStarted, gameOver, gamePaused]);
 
         return (
             <>
@@ -306,7 +359,9 @@ function MyThree() {
                         setShipHp(prev => {
                             const newHp = Math.max(0, prev - obstacle.hp);
                             if (newHp === 0) {
+                                setGameOver(true);
                                 setShowNameInput(true);
+                                stopAllSounds(); // Stop all sounds when game ends
                             }
                             return newHp;
                         });
@@ -404,7 +459,7 @@ function MyThree() {
 
         useFrame(() => {
             const targetX = position[0];
-            const targetY = position[1] + 2;
+            const targetY = position[1] + 1;
             const targetZ = position[2] + 5;
 
             camera.position.set(targetX, targetY, targetZ);
@@ -457,7 +512,7 @@ function MyThree() {
             await saveScore(filteredName, score, timeElapsed);
             setShowNameInput(false);
             setPlayerName('');
-            setGameOver(true);
+            // gameOver is already true, no need to set it again
         }
     };
 
@@ -511,6 +566,35 @@ function MyThree() {
         }
     };
 
+    const stopAllSounds = () => {
+        // Stop background music
+        if (audioRef.current) {
+            audioRef.current.pause();
+            setIsPlaying(false);
+        }
+        
+        // Stop continuous shooting sounds
+        if (shootingIntervalRef.current) {
+            clearInterval(shootingIntervalRef.current);
+            shootingIntervalRef.current = null;
+        }
+        
+        // Stop all active sound effect oscillators
+        activeOscillatorsRef.current.forEach(oscillator => {
+            try {
+                oscillator.stop();
+                oscillator.disconnect();
+            } catch (error) {
+                // Oscillator might already be stopped
+            }
+        });
+        activeOscillatorsRef.current = [];
+        
+        // Reset input states to prevent any lingering shooting
+        setKeyState(prev => ({ ...prev, shoot: false }));
+        setMousePressed(false);
+    };
+
     // Initialize audio when component mounts
     useEffect(() => {
         initAudio();
@@ -534,6 +618,19 @@ function MyThree() {
             if (audioContextRef.current) {
                 audioContextRef.current.close();
             }
+            // Cleanup shooting interval on unmount
+            if (shootingIntervalRef.current) {
+                clearInterval(shootingIntervalRef.current);
+            }
+            // Stop all active oscillators on unmount
+            activeOscillatorsRef.current.forEach(oscillator => {
+                try {
+                    oscillator.stop();
+                    oscillator.disconnect();
+                } catch (error) {
+                    // Oscillator might already be stopped
+                }
+            });
         };
     }, []);
 
@@ -594,9 +691,16 @@ function MyThree() {
         } catch (error) {
             // Failed to restart music
         }
-    };    const pauseGame = () => {
+    };
+
+    const pauseGame = () => {
         setGamePaused(true);
         pauseMusic();
+        // Stop shooting when game is paused
+        if (shootingIntervalRef.current) {
+            clearInterval(shootingIntervalRef.current);
+            shootingIntervalRef.current = null;
+        }
     };
 
     const unpauseGame = async () => {
@@ -623,7 +727,7 @@ function MyThree() {
 
     // Time-based scoring system
     useEffect(() => {
-        if (gameOver || gamePaused) return;
+        if (!gameStarted || gameOver || gamePaused) return;
 
         const scoreInterval = setInterval(() => {
             setScore(prev => prev + 1);
@@ -631,7 +735,7 @@ function MyThree() {
         }, 1000);
 
         return () => clearInterval(scoreInterval);
-    }, [gameOver, gamePaused]);
+    }, [gameStarted, gameOver, gamePaused]);
 
     useEffect(() => {
         if (score > 0 && score % 200 === 0) {
@@ -644,6 +748,10 @@ function MyThree() {
             switch (event.key) {
                 case 'Escape':
                     togglePause();
+                    break;
+                case ' ':
+                    event.preventDefault(); // Prevent page scroll
+                    setKeyState(prev => ({ ...prev, shoot: true }));
                     break;
                 case 'a':
                     setKeyState(prev => ({ ...prev, left: true }));
@@ -674,6 +782,9 @@ function MyThree() {
 
         const handleKeyUp = (event) => {
             switch (event.key) {
+                case ' ':
+                    setKeyState(prev => ({ ...prev, shoot: false }));
+                    break;
                 case 'a':
                     setKeyState(prev => ({ ...prev, left: false }));
                     break;
@@ -701,11 +812,27 @@ function MyThree() {
             }
         };
 
+        const handleMouseDown = (event) => {
+            if (event.button === 0) { // Left mouse button
+                setMousePressed(true);
+            }
+        };
+
+        const handleMouseUp = (event) => {
+            if (event.button === 0) { // Left mouse button
+                setMousePressed(false);
+            }
+        };
+
         window.addEventListener('keydown', handleKeyDown);
         window.addEventListener('keyup', handleKeyUp);
+        window.addEventListener('mousedown', handleMouseDown);
+        window.addEventListener('mouseup', handleMouseUp);
         return () => {
             window.removeEventListener('keydown', handleKeyDown);
             window.removeEventListener('keyup', handleKeyUp);
+            window.removeEventListener('mousedown', handleMouseDown);
+            window.removeEventListener('mouseup', handleMouseUp);
         };
     }, []);
 
@@ -874,7 +1001,7 @@ function MyThree() {
                             marginBottom: '40px',
                             opacity: '0.8'
                         }}>
-                            🚀 Navigate • 🔫 Click to Shoot • ⭐ Survive
+                            🚀 Navigate • 🔫 Click/Hold or SPACE to Shoot • ⭐ Survive
                         </div>
                         <button
                             onClick={startGame}
@@ -1123,7 +1250,7 @@ function MyThree() {
                             <button
                                 onClick={() => {
                                     setShowNameInput(false);
-                                    setGameOver(true);
+                                    // gameOver is already true, no need to set it again
                                 }}
                                 style={{
                                     fontSize: '20px',
@@ -1232,7 +1359,7 @@ function MyThree() {
             {/* 3D Canvas - only show when game is started */}
             {gameStarted && (
                 <Canvas
-                    camera={{ position: [0, 2, 5], fov: 75 }}
+                    camera={{ position: [0, 0, 5], fov: 75 }}
                     style={{ background: '#000000' }}
                     shadows
                 >
